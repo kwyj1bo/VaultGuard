@@ -6,6 +6,6 @@ import org.springframework.stereotype.Repository;
 import com.kwyjibo.VaultGuard.model.JitRequest;
 
 @Repository
-public interface JitRequestRepository extends JpaRepository<JitRequest, Long> {
-
+public interface JitRequestRepo extends JpaRepository<JitRequest, Long> {
+    
 }
