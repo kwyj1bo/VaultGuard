@@ -36,4 +36,14 @@ public class JitRequestService {
         return jitRequestRepo.save(request);
 
     }
+
+    public JitRequest approveRequest(Long requestId){
+        JitRequest request = jitRequestRepo.findById(requestId)
+            .orElseThrow(() -> new RuntimeException("Request not found"));
+    
+        request.setStatus("APPROVED");
+        request.setApprovedAt(LocalDateTime.now());
+        request.setExpiresAt(LocalDateTime.now().plusMinutes(request.getDurationMinutes()));
+        return jitRequestRepo.save(request);
+    }
 }

@@ -35,4 +35,8 @@ public class JitRequest {
     private LocalDateTime requestedAt;
 
     private String status;  
+
+    private LocalDateTime approvedAt;
+    private LocalDateTime expiresAt;
+
 }

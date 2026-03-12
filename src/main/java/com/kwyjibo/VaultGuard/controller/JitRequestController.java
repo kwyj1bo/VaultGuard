@@ -1,6 +1,8 @@
 package com.kwyjibo.VaultGuard.controller;
 
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,10 +19,12 @@ public class JitRequestController {
     private final JitRequestService jitRequestService;
 
     @PostMapping("/request")
-    public JitRequest requestAccess(
-            @RequestParam Long userId, 
-            @RequestParam Long serverId, 
-            @RequestParam int duration) {
+    public JitRequest requestAccess(@RequestParam Long userId, @RequestParam Long serverId, @RequestParam int duration) {
         return jitRequestService.createRequest(userId, serverId, duration);
+    }
+
+    @PutMapping("/{id}/approve")
+    public JitRequest approve(@PathVariable Long id) {
+        return jitRequestService.approveRequest(id);
     }
 }
