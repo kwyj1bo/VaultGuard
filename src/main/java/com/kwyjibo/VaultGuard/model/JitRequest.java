@@ -39,4 +39,7 @@ public class JitRequest {
     private LocalDateTime approvedAt;
     private LocalDateTime expiresAt;
 
+    private String generatedUsername;
+    private String generatedPassword;
+    private String vaultLeaseId;
 }

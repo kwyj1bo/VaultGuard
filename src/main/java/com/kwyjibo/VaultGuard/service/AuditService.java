@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.vault.core.VaultTemplate;
 
 import com.kwyjibo.VaultGuard.model.AuditLog;
 import com.kwyjibo.VaultGuard.model.JitRequest;
@@ -21,6 +22,7 @@ public class AuditService {
 
     private final AuditLogRepo auditLogRepo;
     private final JitRequestRepo jitRequestRepo;
+    private final VaultTemplate vaultTemplate;
 
     private static final List<String> BLACKLIST = Arrays.asList("DROP", "DELETE", "TRUNCATE", "GRANT");
     
@@ -38,12 +40,21 @@ public class AuditService {
         auditLogRepo.save(audit);
         
         if (sus) {
-            log.warn("SUSPICIOUS ACTIVITY DETECTED: {}. Revoking ID: {}", action, requestId);
+            log.warn("🚨 SUSPICIOUS ACTIVITY: {}. Revoking via Vault...", action);
             revokeAccess(request);
         }
     }
+
     private void revokeAccess(JitRequest request) {
         request.setStatus("REVOKED");
         jitRequestRepo.save(request);
+        if (request.getVaultLeaseId() != null) {
+            try {
+                vaultTemplate.opsForSys().revoke(request.getVaultLeaseId());
+                log.info("Vault lease {} revoked for Request ID {}", request.getVaultLeaseId(), request.getId());
+            } catch (Exception e) {
+                log.error("Failed to revoke Vault lease: " + e.getMessage());
+            }
+        }
     }
 }
