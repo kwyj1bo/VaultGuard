@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.vault.core.VaultTemplate;
@@ -26,13 +27,23 @@ public class AuditService {
     private final JitRequestRepo jitRequestRepo;
     private final VaultTemplate vaultTemplate;
     private final SimpMessagingTemplate messagingTemplate;
+    private final StringRedisTemplate redisTemplate;
 
     private static final List<String> BLACKLIST = Arrays.asList("DROP", "DELETE", "TRUNCATE", "GRANT");
-    
-    public void logAction(Long requestId, String action){
+
+    public void logAction(Long requestId, String action) {
+        String sessionKey = "session:" + requestId;
+        String val = redisTemplate.opsForValue().get(sessionKey);
+
+        if (val == null) {
+            log.warn("❌ BLOCKED: No active Redis session for ID {}. Possibly expired or unauthorized.", requestId);
+            messagingTemplate.convertAndSend("/topic/alerts", "BLOCKED: Unauthorized attempt by ID " + requestId);
+            return;
+        }
+
         JitRequest request = jitRequestRepo.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
-    
+
         AuditLog audit = new AuditLog();
         audit.setJitRequest(request);
         audit.setActionPerformed(action);
@@ -41,10 +52,13 @@ public class AuditService {
         boolean sus = BLACKLIST.stream().anyMatch(word -> action.toUpperCase().contains(word));
         audit.setSuspicious(sus);
         auditLogRepo.save(audit);
-        
+
         if (sus) {
             log.warn("🚨 SUSPICIOUS ACTIVITY: {}. Revoking via Vault...", action);
+            redisTemplate.delete(sessionKey);
             revokeAccess(request, action);
+        } else {
+            log.info("✅ ACTION ALLOWED: {}", action);
         }
     }
 
@@ -52,8 +66,9 @@ public class AuditService {
         request.setStatus("REVOKED");
         jitRequestRepo.save(request);
 
-        messagingTemplate.convertAndSend("/topic/alerts", 
-            "REVOKED: Request ID " + request.getId() + " attempted " + action);
+        messagingTemplate.convertAndSend("/topic/alerts",
+                "REVOKED: Request ID " + request.getId() + " attempted " + action);
+        
         if (request.getVaultLeaseId() != null) {
             try {
                 vaultTemplate.write("sys/leases/revoke", Map.of("lease_id", request.getVaultLeaseId()));
