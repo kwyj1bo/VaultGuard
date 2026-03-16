@@ -3,7 +3,9 @@ package com.kwyjibo.VaultGuard.service;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.vault.core.VaultTemplate;
 
@@ -23,6 +25,7 @@ public class AuditService {
     private final AuditLogRepo auditLogRepo;
     private final JitRequestRepo jitRequestRepo;
     private final VaultTemplate vaultTemplate;
+    private final SimpMessagingTemplate messagingTemplate;
 
     private static final List<String> BLACKLIST = Arrays.asList("DROP", "DELETE", "TRUNCATE", "GRANT");
     
@@ -41,16 +44,19 @@ public class AuditService {
         
         if (sus) {
             log.warn("🚨 SUSPICIOUS ACTIVITY: {}. Revoking via Vault...", action);
-            revokeAccess(request);
+            revokeAccess(request, action);
         }
     }
 
-    private void revokeAccess(JitRequest request) {
+    private void revokeAccess(JitRequest request, String action) {
         request.setStatus("REVOKED");
         jitRequestRepo.save(request);
+
+        messagingTemplate.convertAndSend("/topic/alerts", 
+            "REVOKED: Request ID " + request.getId() + " attempted " + action);
         if (request.getVaultLeaseId() != null) {
             try {
-                vaultTemplate.opsForSys().revoke(request.getVaultLeaseId());
+                vaultTemplate.write("sys/leases/revoke", Map.of("lease_id", request.getVaultLeaseId()));
                 log.info("Vault lease {} revoked for Request ID {}", request.getVaultLeaseId(), request.getId());
             } catch (Exception e) {
                 log.error("Failed to revoke Vault lease: " + e.getMessage());
